@@ -1,11 +1,11 @@
-## Overview
-prodversion is an extension of semantic versioning designed for production environments that can be used for software and hardware versioning.
-- Encodes/decodes to a common 64 byte sequence across languages
+# prodversion
+An extension of semantic versioning designed for production environments for software and hardware versioning across languages and architectures
+
+## Features
+- Encodes/decodes as a common 64 byte sequence (cross arch, endianness agnostic)
 - Provides additional and enumerable context about running software/hardware
-    - Easily reference the exact commit
-    - Clearly mark special variants
-- Easy generation via build scripts & CI/CD solutions
-- Verify software updates by product/part identifier & release channel
+- Easy population via build scripts & CI/CD solutions
+- Implement software updates by product/part identifier & release channel
 
 ## Applications
 - Hardware (PCB)
@@ -16,7 +16,7 @@ prodversion is an extension of semantic versioning designed for production envir
 ## Elements
 - **Product/Part Identifier**: 25 character unique model number/part number
 - **Semantic Version**
-    - **Major**: breaking/major changes
+    - **Major**: major & breaking changes
     - **Minor**: additions and improvements
     - **Patch**: fixes
 - **Build Number**: count of builds on this semantic version
