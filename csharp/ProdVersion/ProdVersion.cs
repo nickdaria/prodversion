@@ -4,69 +4,114 @@ using System.Text;
 
 namespace ProdVersion
 {
-    public enum ReleaseChannelType : char
+    public enum ReleaseChannel : byte
     {
-        Dev         = 'd',
-        Internal    = 'i',
-        Alpha       = 'a',
-        Beta        = 'b',
-        Candidate   = 'c',
-        Release     = 'r',
-        Factory     = 'f'
+        Dev         = (byte)'d',
+        Internal    = (byte)'i',
+        Alpha       = (byte)'a',
+        Beta        = (byte)'b',
+        Candidate   = (byte)'c',
+        Release     = (byte)'r',
+        Factory     = (byte)'f'
     }
 
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct ProdVersion
+    public struct VersionInfo
     {
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 26)] // 25 chars + null terminator
-        private string product;
+        private const int PRODUCT_SIZE = 25;
+        private const int METADATA_SIZE = 15;
+        private const int COMMIT_HASH_SIZE = 7;
 
-        public ushort Major;
-        public ushort Minor;
-        public ushort Patch;
-        
-        public ushort Build;
-        public ReleaseChannelType ReleaseChannel;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 16)] // 15 chars + null terminator
-        private string metadata;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8)] // 7 chars + null terminator
-        private string commitHash;
-
-        private ulong unixTimestamp; // Stored as Unix time (seconds since epoch)
+        private string _product;
+        private ushort _major;
+        private ushort _minor;
+        private ushort _patch;
+        private ushort _build;
+        private ReleaseChannel _releaseChannel;
+        private string _metadata;
+        private string _commitHash;
+        private ulong _unixTimestamp; // Stored as Unix time (seconds since epoch)
 
         public string Product
         {
-            get => product?.TrimEnd('\0');
-            set => product = (value ?? "").PadRight(26, '\0').Substring(0, 26);
+            get => (_product ?? "").TrimEnd('\0');
+            set
+            {
+                // Ensure we enforce the size constraints
+                if (value == null) value = "";
+                _product = value.Length > PRODUCT_SIZE
+                    ? value[..PRODUCT_SIZE]
+                    : value.PadRight(PRODUCT_SIZE, '\0');
+            }
+        }
+
+        public ushort Major
+        {
+            get => _major;
+            set => _major = value;
+        }
+
+        public ushort Minor
+        {
+            get => _minor;
+            set => _minor = value;
+        }
+
+        public ushort Patch
+        {
+            get => _patch;
+            set => _patch = value;
+        }
+
+        public ushort Build
+        {
+            get => _build;
+            set => _build = value;
+        }
+
+        public ReleaseChannel ReleaseChannel
+        {
+            get => _releaseChannel;
+            set => _releaseChannel = value;
         }
 
         public string Metadata
         {
-            get => metadata?.TrimEnd('\0');
-            set => metadata = (value ?? "").PadRight(16, '\0').Substring(0, 16);
+            get => (_metadata ?? "").TrimEnd('\0');
+            set
+            {
+                if (value == null) value = "";
+                _metadata = value.Length > METADATA_SIZE
+                    ? value[..METADATA_SIZE]
+                    : value.PadRight(METADATA_SIZE, '\0');
+            }
         }
 
         public string CommitHash
         {
-            get => commitHash?.TrimEnd('\0');
-            set => commitHash = (value ?? "").PadRight(8, '\0').Substring(0, 8);
+            get => (_commitHash ?? "").TrimEnd('\0');
+            set
+            {
+                if (value == null) value = "";
+                _commitHash = value.Length > COMMIT_HASH_SIZE
+                    ? value[..COMMIT_HASH_SIZE]
+                    : value.PadRight(COMMIT_HASH_SIZE, '\0');
+            }
         }
 
         public DateTime Date
         {
-            get => DateTimeOffset.FromUnixTimeSeconds((long)unixTimestamp).UtcDateTime;
-            set => unixTimestamp = (ulong)new DateTimeOffset(value).ToUnixTimeSeconds();
+            get => DateTimeOffset.FromUnixTimeSeconds((long)_unixTimestamp).UtcDateTime;
+            set => _unixTimestamp = (ulong)new DateTimeOffset(value).ToUnixTimeSeconds();
         }
 
-        public static byte[] Encode(ProdVersion version)
+        public static byte[] Encode(VersionInfo version)
         {
-            byte[] buffer = new byte[Marshal.SizeOf(typeof(ProdVersion))];
+            byte[] buffer = new byte[64]; // Hard cap at 64 bytes
             int offset = 0;
 
-            Encoding.ASCII.GetBytes(version.Product.PadRight(26, '\0')).CopyTo(buffer, offset);
-            offset += 26;
+            // Use properties so we get properly trimmed/padded strings
+            Encoding.ASCII.GetBytes(version.Product).CopyTo(buffer, offset);
+            offset += PRODUCT_SIZE; // Hard limit at 25 bytes
 
             BitConverter.GetBytes(version.Major).CopyTo(buffer, offset);
             offset += sizeof(ushort);
@@ -82,28 +127,29 @@ namespace ProdVersion
 
             buffer[offset++] = (byte)version.ReleaseChannel;
 
-            Encoding.ASCII.GetBytes(version.Metadata.PadRight(16, '\0')).CopyTo(buffer, offset);
-            offset += 16;
+            Encoding.ASCII.GetBytes(version.Metadata).CopyTo(buffer, offset);
+            offset += METADATA_SIZE;
 
-            Encoding.ASCII.GetBytes(version.CommitHash.PadRight(8, '\0')).CopyTo(buffer, offset);
-            offset += 8;
+            Encoding.ASCII.GetBytes(version.CommitHash).CopyTo(buffer, offset);
+            offset += COMMIT_HASH_SIZE;
 
-            BitConverter.GetBytes(version.unixTimestamp).CopyTo(buffer, offset);
+            BitConverter.GetBytes(version._unixTimestamp).CopyTo(buffer, offset);
             offset += sizeof(ulong);
 
             return buffer;
         }
 
-        public static bool Decode(byte[] buffer, out ProdVersion version)
+        public static bool Decode(byte[] buffer, out VersionInfo version)
         {
-            version = new ProdVersion();
-            if (buffer == null || buffer.Length < Marshal.SizeOf(typeof(ProdVersion)))
+            version = new VersionInfo();
+            if (buffer == null || buffer.Length != 64)
                 return false;
 
             int offset = 0;
 
-            version.Product = Encoding.ASCII.GetString(buffer, offset, 26).TrimEnd('\0');
-            offset += 26;
+            var product = Encoding.ASCII.GetString(buffer, offset, PRODUCT_SIZE).TrimEnd('\0');
+            version.Product = product;
+            offset += PRODUCT_SIZE;
 
             version.Major = BitConverter.ToUInt16(buffer, offset);
             offset += sizeof(ushort);
@@ -117,15 +163,17 @@ namespace ProdVersion
             version.Build = BitConverter.ToUInt16(buffer, offset);
             offset += sizeof(ushort);
 
-            version.ReleaseChannel = (ProdVersionChannel)buffer[offset++];
+            version.ReleaseChannel = (ReleaseChannel)buffer[offset++];
+            
+            var metadata = Encoding.ASCII.GetString(buffer, offset, METADATA_SIZE).TrimEnd('\0');
+            version.Metadata = metadata;
+            offset += METADATA_SIZE;
 
-            version.Metadata = Encoding.ASCII.GetString(buffer, offset, 16).TrimEnd('\0');
-            offset += 16;
+            var commitHash = Encoding.ASCII.GetString(buffer, offset, COMMIT_HASH_SIZE).TrimEnd('\0');
+            version.CommitHash = commitHash;
+            offset += COMMIT_HASH_SIZE;
 
-            version.CommitHash = Encoding.ASCII.GetString(buffer, offset, 8).TrimEnd('\0');
-            offset += 8;
-
-            version.unixTimestamp = BitConverter.ToUInt64(buffer, offset);
+            version._unixTimestamp = BitConverter.ToUInt64(buffer, offset);
             offset += sizeof(ulong);
 
             return true;
@@ -134,15 +182,15 @@ namespace ProdVersion
         public override string ToString()
         {
             return string.Format(
-                "{0} {1}.{2}.{3}{4}{5}{6} b{7}",
+                "{0} {1}.{2}.{3}{4}{5}{6}{7}",
                 Product,
                 Major,
                 Minor,
                 Patch,
                 (char)ReleaseChannel,
-                string.IsNullOrEmpty(Metadata) ? "" : "-" + Metadata,
-                ReleaseChannel != ProdVersionChannel.Release ? " " + CommitHash : "",
-                Build
+                string.IsNullOrEmpty(Metadata.TrimEnd('\0')) ? "" : $"-{Metadata.TrimEnd('\0')}",
+                ReleaseChannel != ReleaseChannel.Release ? $" ({CommitHash.TrimEnd('\0')})" : "",
+                Build == 0 ? "" : $" build {Build}"
             );
         }
     }
