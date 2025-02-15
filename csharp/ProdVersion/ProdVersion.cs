@@ -17,7 +17,8 @@ namespace ProdVersion
 
     public struct VersionInfo
     {
-        private const int PRODUCT_SIZE = 25;
+        private const byte ENCODING_VERSION = 0x01;
+        private const int PRODUCT_SIZE = 24;
         private const int METADATA_SIZE = 15;
         private const int COMMIT_HASH_SIZE = 7;
 
@@ -36,11 +37,11 @@ namespace ProdVersion
             get => (_product ?? "").TrimEnd('\0');
             set
             {
-                // Ensure we enforce the size constraints
-                if (value == null) value = "";
-                _product = value.Length > PRODUCT_SIZE
-                    ? value[..PRODUCT_SIZE]
-                    : value.PadRight(PRODUCT_SIZE, '\0');
+                //  Enforce a max length so you never store an overly long string.
+                if (value != null && value.Length > PRODUCT_SIZE)
+                    value = value.Substring(0, PRODUCT_SIZE);
+
+                _product = value ?? string.Empty;
             }
         }
 
@@ -79,10 +80,11 @@ namespace ProdVersion
             get => (_metadata ?? "").TrimEnd('\0');
             set
             {
-                if (value == null) value = "";
-                _metadata = value.Length > METADATA_SIZE
-                    ? value[..METADATA_SIZE]
-                    : value.PadRight(METADATA_SIZE, '\0');
+                //  Enforce max length
+                if (value != null && value.Length > METADATA_SIZE)
+                    value = value.Substring(0, METADATA_SIZE);
+
+                _metadata = value ?? string.Empty;
             }
         }
 
@@ -91,10 +93,11 @@ namespace ProdVersion
             get => (_commitHash ?? "").TrimEnd('\0');
             set
             {
-                if (value == null) value = "";
-                _commitHash = value.Length > COMMIT_HASH_SIZE
-                    ? value[..COMMIT_HASH_SIZE]
-                    : value.PadRight(COMMIT_HASH_SIZE, '\0');
+                //  Enforce a max length.
+                if (value != null && value.Length > COMMIT_HASH_SIZE)
+                    value = value.Substring(0, COMMIT_HASH_SIZE);
+
+                _commitHash = value ?? string.Empty;
             }
         }
 
@@ -106,35 +109,49 @@ namespace ProdVersion
 
         public static byte[] Encode(VersionInfo version)
         {
-            byte[] buffer = new byte[64]; // Hard cap at 64 bytes
+            byte[] buffer = new byte[64];
             int offset = 0;
 
-            // Use properties so we get properly trimmed/padded strings
+            //  Version structure byte
+            buffer[offset++] = ENCODING_VERSION;
+
+            //  Product/Part ID
             Encoding.ASCII.GetBytes(version.Product).CopyTo(buffer, offset);
-            offset += PRODUCT_SIZE; // Hard limit at 25 bytes
+            offset += PRODUCT_SIZE;
 
-            BitConverter.GetBytes(version.Major).CopyTo(buffer, offset);
-            offset += sizeof(ushort);
+            //  Semantic version
+            buffer[offset++] = (byte)(version.Major >> 8);
+            buffer[offset++] = (byte)version.Major;
 
-            BitConverter.GetBytes(version.Minor).CopyTo(buffer, offset);
-            offset += sizeof(ushort);
+            buffer[offset++] = (byte)(version.Minor >> 8);
+            buffer[offset++] = (byte)version.Minor;
 
-            BitConverter.GetBytes(version.Patch).CopyTo(buffer, offset);
-            offset += sizeof(ushort);
+            buffer[offset++] = (byte)(version.Patch >> 8);
+            buffer[offset++] = (byte)version.Patch;
 
-            BitConverter.GetBytes(version.Build).CopyTo(buffer, offset);
-            offset += sizeof(ushort);
+            buffer[offset++] = (byte)(version.Build >> 8);
+            buffer[offset++] = (byte)version.Build;
 
+            //  Release channel
             buffer[offset++] = (byte)version.ReleaseChannel;
 
+            //  Metadata
             Encoding.ASCII.GetBytes(version.Metadata).CopyTo(buffer, offset);
             offset += METADATA_SIZE;
 
+            //  Commit hash
             Encoding.ASCII.GetBytes(version.CommitHash).CopyTo(buffer, offset);
             offset += COMMIT_HASH_SIZE;
 
-            BitConverter.GetBytes(version._unixTimestamp).CopyTo(buffer, offset);
-            offset += sizeof(ulong);
+            //  Timestamp
+            buffer[offset++] = (byte)(version._unixTimestamp >> 56);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 48);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 40);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 32);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 24);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 16);
+            buffer[offset++] = (byte)(version._unixTimestamp >> 8);
+            buffer[offset++] = (byte)version._unixTimestamp;
 
             return buffer;
         }
@@ -147,36 +164,56 @@ namespace ProdVersion
 
             int offset = 0;
 
-            var product = Encoding.ASCII.GetString(buffer, offset, PRODUCT_SIZE).TrimEnd('\0');
-            version.Product = product;
+            //  Verify structure version
+            byte ver = buffer[offset++];
+            if(ver != 1) { throw new NotImplementedException($"Unsupported structure version: {ver}"); }
+
+            //  Part/Product Identifier
+            version.Product = GetCString(buffer, offset, PRODUCT_SIZE);
             offset += PRODUCT_SIZE;
 
-            version.Major = BitConverter.ToUInt16(buffer, offset);
-            offset += sizeof(ushort);
+            //  Semantic Version
+            version.Major = (ushort)((buffer[offset++] << 8) | buffer[offset++]);
+            version.Minor = (ushort)((buffer[offset++] << 8) | buffer[offset++]);
+            version.Patch = (ushort)((buffer[offset++] << 8) | buffer[offset++]);
+            version.Build = (ushort)((buffer[offset++] << 8) | buffer[offset++]);
 
-            version.Minor = BitConverter.ToUInt16(buffer, offset);
-            offset += sizeof(ushort);
-
-            version.Patch = BitConverter.ToUInt16(buffer, offset);
-            offset += sizeof(ushort);
-
-            version.Build = BitConverter.ToUInt16(buffer, offset);
-            offset += sizeof(ushort);
-
+            //  Release channel
             version.ReleaseChannel = (ReleaseChannel)buffer[offset++];
-            
-            var metadata = Encoding.ASCII.GetString(buffer, offset, METADATA_SIZE).TrimEnd('\0');
-            version.Metadata = metadata;
+
+            //  Metadata
+            version.Metadata = GetCString(buffer, offset, METADATA_SIZE);
             offset += METADATA_SIZE;
 
-            var commitHash = Encoding.ASCII.GetString(buffer, offset, COMMIT_HASH_SIZE).TrimEnd('\0');
-            version.CommitHash = commitHash;
+            //  Commit
+            version.CommitHash = GetCString(buffer, offset, COMMIT_HASH_SIZE);
             offset += COMMIT_HASH_SIZE;
 
-            version._unixTimestamp = BitConverter.ToUInt64(buffer, offset);
-            offset += sizeof(ulong);
+            //  Timestamp
+            version._unixTimestamp =
+                ((ulong)buffer[offset++] << 56) |
+                ((ulong)buffer[offset++] << 48) |
+                ((ulong)buffer[offset++] << 40) |
+                ((ulong)buffer[offset++] << 32) |
+                ((ulong)buffer[offset++] << 24) |
+                ((ulong)buffer[offset++] << 16) |
+                ((ulong)buffer[offset++] << 8) |
+                buffer[offset++];
 
             return true;
+        }
+
+        private static string GetCString(byte[] buffer, int offset, int length)
+        {
+            string str = Encoding.ASCII.GetString(buffer, offset, length);
+
+            int nullIndex = str.IndexOf('\0');
+            if (nullIndex >= 0)
+            {
+                str = str.Substring(0, nullIndex);
+            }
+
+            return str;
         }
 
         public override string ToString()
