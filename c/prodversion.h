@@ -12,15 +12,13 @@
 #include <time.h>
 
 /// The current version of the struct itself
-#define PRODVER_STRUCTVER      1
+#define PRODVER_STRUCTVER             1
 
-/// Exactly how many bytes the C# code writes/reads for each field.
-#define PRODVER_PRODUCT_LEN            24  // in the byte array (struct has +1 for '\0')
-#define PRODVER_METADATA_LEN           15  // in the byte array (struct has +1 for '\0')
-#define PRODVER_COMMIT_LEN        7   // in the byte array (struct has +1 for '\0')
+#define PRODVER_ENCODED_LEN           64
 
-/// The total bytes that C# produces/consumes
-#define PRODVER_ENCODED_LEN    64
+#define PRODVER_FLD_PRODUCT_LEN       24
+#define PRODVER_FLD_METADATA_LEN      15
+#define PRODVER_FLD_COMMIT_LEN        7
 
 /// @brief Unique character indicating the release channel
 typedef enum {
@@ -36,7 +34,7 @@ typedef enum {
 
 typedef struct {
     //  Product/Part Identifier
-    char product[PRODVER_PRODUCT_LEN + 1];
+    char product[PRODVER_FLD_PRODUCT_LEN + 1];
 
     //  Semantic Versioning
     uint16_t major;
@@ -52,12 +50,12 @@ typedef struct {
     /// @brief Optional tag appeded to version for part numbers or special variations
     /// @example 1.0.1a-stripped, 1.0.1r-5CW3C
     /// @note 15 characters, last byte reserved for null terminator
-    char metadata[PRODVER_METADATA_LEN + 1];
+    char metadata[PRODVER_FLD_METADATA_LEN + 1];
 
     /// @brief First 7 characters of a Git commit or TFS check-in/shelveset number. If there is no associated commit OR the code has varied at all, make this empty.
     /// @example 7b5a2fe
     /// @note 7 characters, last byte reserved for null terminator
-    char commitHash[PRODVER_COMMIT_LEN + 1];
+    char commitHash[PRODVER_FLD_COMMIT_LEN + 1];
 
     /// @brief Date & time of software build/finalization
     uint64_t date;
@@ -80,9 +78,9 @@ static inline size_t prodVersionEncodeBytes(char* ret_buf, const size_t len, con
     ret_buf[offset++] = PRODVER_STRUCTVER;
 
     //  Product/Part identifier
-    memset(ret_buf + offset, 0, PRODVER_PRODUCT_LEN);
-    strncpy(ret_buf + offset, version->product, PRODVER_PRODUCT_LEN);
-    offset += PRODVER_PRODUCT_LEN;
+    memset(ret_buf + offset, 0, PRODVER_FLD_PRODUCT_LEN);
+    strncpy(ret_buf + offset, version->product, PRODVER_FLD_PRODUCT_LEN);
+    offset += PRODVER_FLD_PRODUCT_LEN;
 
     //  Semantic versioning
     ret_buf[offset++] = (char)((version->major >> 8) & 0xFF);
@@ -101,14 +99,14 @@ static inline size_t prodVersionEncodeBytes(char* ret_buf, const size_t len, con
     ret_buf[offset++] = (char)version->releaseChannel;
 
     //  Metadata
-    memset(ret_buf + offset, 0, PRODVER_METADATA_LEN);
-    strncpy(ret_buf + offset, version->metadata, PRODVER_METADATA_LEN);
-    offset += PRODVER_METADATA_LEN;
+    memset(ret_buf + offset, 0, PRODVER_FLD_METADATA_LEN);
+    strncpy(ret_buf + offset, version->metadata, PRODVER_FLD_METADATA_LEN);
+    offset += PRODVER_FLD_METADATA_LEN;
 
     //  Commit identifier
-    memset(ret_buf + offset, 0, PRODVER_COMMIT_LEN);
-    strncpy(ret_buf + offset, version->commitHash, PRODVER_COMMIT_LEN);
-    offset += PRODVER_COMMIT_LEN;
+    memset(ret_buf + offset, 0, PRODVER_FLD_COMMIT_LEN);
+    strncpy(ret_buf + offset, version->commitHash, PRODVER_FLD_COMMIT_LEN);
+    offset += PRODVER_FLD_COMMIT_LEN;
 
     //  Date
     uint64_t d = version->date;
@@ -121,7 +119,8 @@ static inline size_t prodVersionEncodeBytes(char* ret_buf, const size_t len, con
     ret_buf[offset++] = (char)((d >>  8) & 0xFF);
     ret_buf[offset++] = (char)( d        & 0xFF);
 
-    return offset;
+    //  Ignore last increment
+    return offset - 1;
 }
 
 /// @brief Decodes a 64-byte array into a version struct, matching the C# library.
@@ -144,9 +143,9 @@ static inline bool prodVersionDecodeBytes(const char* buf, const size_t len, pro
     }
 
     //  Product
-    memcpy(ret_version->product, buf + offset, PRODVER_PRODUCT_LEN);
-    ret_version->product[PRODVER_PRODUCT_LEN] = '\0'; // safe in struct
-    offset += PRODVER_PRODUCT_LEN;
+    memcpy(ret_version->product, buf + offset, PRODVER_FLD_PRODUCT_LEN);
+    ret_version->product[PRODVER_FLD_PRODUCT_LEN] = '\0'; // safe in struct
+    offset += PRODVER_FLD_PRODUCT_LEN;
 
     //  Semantic Versioning
     ret_version->major = (uint16_t)(((uint8_t)buf[offset] << 8) | (uint8_t)buf[offset + 1]);
@@ -162,14 +161,14 @@ static inline bool prodVersionDecodeBytes(const char* buf, const size_t len, pro
     ret_version->releaseChannel = (prodVersionChannel_t)buf[offset++];
 
     //  Metadata
-    memcpy(ret_version->metadata, buf + offset, PRODVER_METADATA_LEN);
-    ret_version->metadata[PRODVER_METADATA_LEN] = '\0';
-    offset += PRODVER_METADATA_LEN;
+    memcpy(ret_version->metadata, buf + offset, PRODVER_FLD_METADATA_LEN);
+    ret_version->metadata[PRODVER_FLD_METADATA_LEN] = '\0';
+    offset += PRODVER_FLD_METADATA_LEN;
 
     //  Commit hash
-    memcpy(ret_version->commitHash, buf + offset, PRODVER_COMMIT_LEN);
-    ret_version->commitHash[PRODVER_COMMIT_LEN] = '\0';
-    offset += PRODVER_COMMIT_LEN;
+    memcpy(ret_version->commitHash, buf + offset, PRODVER_FLD_COMMIT_LEN);
+    ret_version->commitHash[PRODVER_FLD_COMMIT_LEN] = '\0';
+    offset += PRODVER_FLD_COMMIT_LEN;
 
     //  Date
     uint64_t d = 0;
