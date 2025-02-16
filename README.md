@@ -1,5 +1,5 @@
 # prodversion
-An extension of semantic versioning designed for production environments for software and hardware versioning across languages and architectures
+An extension of semantic versioning designed for software and hardware versioning across languages and architectures in production environments
 
 ## Features
 - Encodes/decodes as a common 64 byte sequence (cross arch, endianness agnostic)
@@ -13,16 +13,23 @@ An extension of semantic versioning designed for production environments for sof
 - Individual software modules/components
 - Local databases
 
-## Elements
-- **Product/Part Identifier**: 25 character unique model number/part number
-- **Semantic Version**
-    - **Major**: major & breaking changes
-    - **Minor**: additions and improvements
-    - **Patch**: fixes
-- **Build Number**: count of builds on this semantic version
-- **Metadata**: optional string to be added for special variants/builds (2.0.1r-stripped)
-- **Commit Hash**: 7 characters from Git commit SHA or TFS check-in
-- **Release Channel**: character appended to version
+# Structure & Encoding Specification
+
+| Field Name        | Description                                                                 | Encoded Byte Index | Format                         | Accepted Values                                      |
+|-------------------|-----------------------------------------------------------------------------|--------------------|--------------------------------|------------------------------------------------------|
+|                   | Version of the encoding format                                              | 0                  | uint8 (not exposed to user)    | `1` (Current format version)                         |
+| product           | Unique model number/part number                                             | 1 - 24             | ASCII string* [24]             | 24-character string (null-terminated)                |
+| major             | Major version, indicating breaking changes                                  | 25 - 26            | uint16 (Big-Endian)            | `0 - 65535`                                          |
+| minor             | Minor version, for additions and improvements                               | 27 - 28            | uint16 (Big-Endian)            | `0 - 65535`                                          |
+| patch             | Patch version, for fixes                                                    | 29 - 30            | uint16 (Big-Endian)            | `0 - 65535`                                          |
+| build             | Incrementing build number for this semantic version                         | 31 - 32            | uint16 (Big-Endian)            | `0 - 65535`                                          |
+| releaseChannel    | Character representing the release channel                                  | 33                 | ASCII Char**                   | *See release channel reference below*                |
+| metadata          | Optional string for special build variations (e.g., `2.0.1r-stripped`)      | 34 - 48            | ASCII string* [15]             | 15-character string (null-terminated)                |
+| commitHash        | Git commit SHA or TFS check-in                                              | 49 - 55            | ASCII string* [7]              | 7-character string (null-terminated)                 |
+| date              | UTC timestamp of build/design date                                          | 56 - 63            | uint64***                      | Seconds since Unix Epoch in UTC                      |
+
+- \* When encoded, ASCII strings are terminated by `\0` or maximum length. Internally, they include a null terminator for `printf` safety
+- \*\* Release channels are identified by character. The following are included:
     - `f` Factory variant
     - `d` Dev (non-functional development)
     - `i` Internal (semi-functional internal use)
@@ -30,7 +37,7 @@ An extension of semantic versioning designed for production environments for sof
     - `b` Beta (reliable unreleased build)
     - `c` Candidate (candidate for release)
     - `r` Release (production run)
-- **Build Date**: UTC of build/design date
+- \*\*\* Higher level language implementations like C# will include automatic tranlation between the underlying format (seconds since Unix epoch) and a more usable DateTime type
 
 ## Example
 *Smart Toaster by ND Designs*
