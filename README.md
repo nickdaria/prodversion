@@ -15,7 +15,7 @@ An extension of semantic versioning designed for software and hardware versionin
 
 # Structure & Encoding Specification
 
-| Field Name        | Description                                                                 | Encoded Byte Index | Format                         | Accepted Values                                      |
+| Field Name        | Description                                                                 | Encoded Byte Index | Encoded Format                         | Accepted Values                                      |
 |-------------------|-----------------------------------------------------------------------------|--------------------|--------------------------------|------------------------------------------------------|
 |                   | Version of the encoding format                                              | 0                  | uint8 (not exposed to user)    | `1` (Current format version)                         |
 | product           | Unique model number/part number                                             | 1 - 24             | ASCII string* [24]             | 24-character string (null-terminated)                |
