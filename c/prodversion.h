@@ -12,7 +12,7 @@
 #include <time.h>
 
 /// The current version of the struct itself
-#define VERSION_STRUCTVER      1
+#define PRODVER_STRUCTVER      1
 
 /// Exactly how many bytes the C# code writes/reads for each field.
 #define PRODVER_PRODUCT_LEN            24  // in the byte array (struct has +1 for '\0')
@@ -77,7 +77,7 @@ static inline size_t prodVersionEncodeBytes(char* ret_buf, const size_t len, con
     size_t offset = 0;
 
     //  Structure version
-    ret_buf[offset++] = VERSION_STRUCTVER;
+    ret_buf[offset++] = PRODVER_STRUCTVER;
 
     //  Product/Part identifier
     memset(ret_buf + offset, 0, PRODVER_PRODUCT_LEN);
@@ -139,7 +139,7 @@ static inline bool prodVersionDecodeBytes(const char* buf, const size_t len, pro
 
     //  Validate structure version
     uint8_t structVer = (uint8_t)buf[offset++];
-    if (structVer != VERSION_STRUCTVER) {
+    if (structVer != PRODVER_STRUCTVER) {
         return false;
     }
 
@@ -206,7 +206,7 @@ static inline size_t prodVersionToString(const prodVersion_t* version, char* ret
     int written = snprintf(
         ret_str,
         buf_len,
-        "%s %u.%u.%u%c%s%s%s%s%u",
+        "%s %u.%u.%u%c%s%s%s%s%s%c",
         version->product[0] ? version->product : "",
         version->major,
         version->minor,
